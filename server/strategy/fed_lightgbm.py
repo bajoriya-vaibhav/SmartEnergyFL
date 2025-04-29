@@ -153,7 +153,7 @@ class FedLightGBMBagging(FedAvg):
         results: List[Tuple[ClientProxy, EvaluateRes]],
         failures: List[Union[Tuple[ClientProxy, EvaluateRes], BaseException]],
     ) -> Tuple[Optional[float], Dict[str, Scalar]]:
-        """Aggregate evaluation metrics from clients and update Prometheus metrics."""
+        """Aggregate evaluation metrics from clients and update Prometheus."""
         if not results:
             log(INFO, f"[ROUND {server_round}] No evaluation results received")
             return None, {}
@@ -172,17 +172,15 @@ class FedLightGBMBagging(FedAvg):
             # Save metrics to Prometheus using the provided function
             if self.save_metrics_fn:
                 self.save_metrics_fn(server_round, aggregated_metrics)
-                log(INFO, f"[ROUND {server_round}] Updated Prometheus metrics: RMSE={aggregated_metrics.get('rmse', 0.0):.4f}, R2={aggregated_metrics.get('r2', 0.0):.4f}")
-            else:
-                log(INFO, f"[ROUND {server_round}] No save_metrics_fn provided, metrics not saved to Prometheus")
+                log(INFO, f"[ROUND {server_round}] Updated Prometheus metrics: RMSE={aggregated_metrics.get('rmse', 0.0):.4f}, R2={aggregated_metrics.get('r2', 0.0):.4f}, AvgPred={aggregated_metrics.get('avg_prediction', 0.0):.4f}")
 
         # Calculate weighted average loss from all clients
         loss_aggregated = None
         if all((res.loss is not None) for _, res in results):
             total_examples = sum(res.num_examples for _, res in results)
             if total_examples > 0:
-                loss_aggregated = sum(res.loss * res.num_examples for _, res in results) / total_examples
-        
+                loss_aggregated = sum(res.num_examples * res.loss for _, res in results) / total_examples
+    
         return loss_aggregated, aggregated_metrics
 
 class FedLightGBMCyclic(FedAvg):
@@ -272,8 +270,6 @@ class FedLightGBMCyclic(FedAvg):
             if self.save_metrics_fn:
                 self.save_metrics_fn(server_round, aggregated_metrics)
                 log(INFO, f"[ROUND {server_round}] Updated Prometheus metrics: RMSE={aggregated_metrics.get('rmse', 0.0):.4f}, R2={aggregated_metrics.get('r2', 0.0):.4f}")
-            else:
-                log(INFO, f"[ROUND {server_round}] No save_metrics_fn provided, metrics not saved to Prometheus")
         
         # For cyclic, we can just use the last client's loss
         loss = results[-1][1].loss if results and results[-1][1].loss is not None else 0.0

@@ -91,7 +91,7 @@ def load_day_data(
             building_id = selected_building
             building_data = data[data['building_id'] == building_id].copy()
 
-        building_data['date'] = pd.to_datetime(building_data['timestamp']).dt.nanosecond % 100 + 1
+        building_data['date'] = pd.to_datetime(building_data['timestamp']).astype('int64') % 1_000_000_000//24
         dates = sorted(building_data['date'].unique())
 
         # Handle day boundaries
@@ -281,10 +281,11 @@ class EnergyForecastClient(Client):
             # Serialize model
             model_bytes = booster.model_to_string().encode()
             
-            # Calculate final test metrics after finding best fold model
             y_pred = booster.predict(X_test)
+            # y_test = np.expm1(y_test)
+            # y_pred = np.expm1(y_pred)
             test_rmse = np.sqrt(mean_squared_error(y_test, y_pred))
-            test_r2 = r2_score(y_test, y_pred)  # Calculate R2 score
+            test_r2 = r2_score(y_test, y_pred) 
             
             log(INFO, f"[CLIENT {self.client_id}] Final test RMSE: {test_rmse:.4f}, R2: {test_r2:.4f}")
 
@@ -353,14 +354,19 @@ class EnergyForecastClient(Client):
 
             # Make predictions
             y_pred = global_model.predict(X_test)
+
+            # y_test = np.expm1(y_test)
+            # y_pred = np.expm1(y_pred)
+
             rmse = np.sqrt(mean_squared_error(y_test, y_pred))
             r2 = r2_score(y_test, y_pred)
+            mean_prediction = float(np.mean(np.expm1(y_pred)))
 
             return EvaluateRes(
                 status=Status(Code.OK, "Success"),
                 loss=float(rmse),
                 num_examples=len(X_test),
-                metrics={"rmse": float(rmse), "r2": float(r2), "eval_day": eval_day_from_config}, # Log the day used
+                metrics={"mean_prediction": mean_prediction, "rmse": float(rmse), "r2": float(r2), "eval_day": eval_day_from_config}, # Log the day used
             )
 
         except Exception as e:
@@ -401,7 +407,7 @@ def run_client() -> None:
     parser.add_argument("--client_id", type=str, required=True)
     parser.add_argument("--building_id", type=int, required=True)
     parser.add_argument("--data_path", type=str, required=True)
-    parser.add_argument("--num_local_round", type=int, default=2)
+    parser.add_argument("--num_local_round", type=int, default=5)
 
     args = parser.parse_args()
 
@@ -415,7 +421,7 @@ def run_client() -> None:
             "metric": "rmse",
             "boosting_type": "gbdt",
             "learning_rate": 0.1,        # Increased from 0.05
-            "num_leaves": 31,            # Reduced from 127
+            "num_leaves": 128,            # Reduced from 1280
             "min_data_in_leaf": 20,      # Reduced from 50
             "feature_fraction": 0.8,
             "bagging_fraction": 0.8,

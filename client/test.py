@@ -12,6 +12,6 @@ df = pd.read_feather(feather_file_path)
 
 # Show the data
 print(df.info())
-print(pd.to_datetime(df['timestamp']).dt.nanosecond % 100+1)
+print((pd.to_datetime(df['timestamp']).astype('int64').head(50) % 1_000_000_000//24 ))
 # print(df['weekday_hour'].head(20))
 # print(df[].groupby(''))

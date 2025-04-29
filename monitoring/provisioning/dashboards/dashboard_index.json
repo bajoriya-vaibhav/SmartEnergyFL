@@ -36,6 +36,101 @@
     },
     {
       "datasource": {},
+      "description": "Average prediction value across clients during evaluation",
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "axisBorderShow": false,
+            "axisCenteredZero": false,
+            "axisColorMode": "text",
+            "axisLabel": "",
+            "axisPlacement": "auto",
+            "barAlignment": 0,
+            "drawStyle": "line",
+            "fillOpacity": 10,
+            "gradientMode": "none",
+            "hideFrom": {
+              "legend": false,
+              "tooltip": false,
+              "viz": false
+            },
+            "insertNulls": false,
+            "lineInterpolation": "smooth",
+            "lineWidth": 2,
+            "pointSize": 5,
+            "scaleDistribution": {
+              "type": "linear"
+            },
+            "showPoints": "auto",
+            "spanNulls": false,
+            "stacking": {
+              "group": "A",
+              "mode": "none"
+            },
+            "thresholdsStyle": {
+              "mode": "off"
+            }
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          },
+          "unit": ""
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 24,
+        "x": 0,
+        "y": 1
+      },
+      "id": 29,
+      "options": {
+        "legend": {
+          "calcs": ["min", "max", "mean"],
+          "displayMode": "table",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "maxHeight": 600,
+          "mode": "single",
+          "sort": "none"
+        }
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "db69454e-e558-479e-b4fc-80db52bf91da"
+          },
+          "disableTextWrap": false,
+          "editorMode": "code",
+          "expr": "avg_prediction",
+          "fullMetaSearch": false,
+          "includeNullMetadata": true,
+          "instant": false,
+          "legendFormat": "Avg Prediction",
+          "range": true,
+          "refId": "A",
+          "useBackend": false
+        }
+      ],
+      "title": "Average Prediction",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {},
       "description": "Root Mean Square Error of the global model",
       "fieldConfig": {
         "defaults": {
@@ -99,7 +194,7 @@
         "h": 8,
         "w": 12,
         "x": 0,
-        "y": 1
+        "y": 9
       },
       "id": 23,
       "options": {
@@ -201,7 +296,7 @@
         "h": 8,
         "w": 12,
         "x": 12,
-        "y": 1
+        "y": 9
       },
       "id": 26,
       "options": {
@@ -300,7 +395,7 @@
         "h": 8,
         "w": 8,
         "x": 0,
-        "y": 9
+        "y": 17
       },
       "id": 27,
       "options": {
@@ -364,7 +459,7 @@
         "h": 8, 
         "w": 8, 
         "x": 8, 
-        "y": 9
+        "y": 17
       },
       "id": 24,
       "options": {
@@ -417,7 +512,7 @@
         "h": 8, 
         "w": 8, 
         "x": 16, 
-        "y": 9
+        "y": 17
       },
       "id": 25,
       "options": {
@@ -512,6 +607,22 @@
                 "value": "right"
               }
             ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Avg Prediction"
+            },
+            "properties": [
+              {
+                "id": "custom.axisPlacement",
+                "value": "right"
+              },
+              {
+                 "id": "unit",
+                 "value": ""
+              }
+            ]
           }
         ]
       },
@@ -519,7 +630,7 @@
         "h": 9,
         "w": 24,
         "x": 0,
-        "y": 17
+        "y": 25
       },
       "id": 28,
       "options": {
@@ -552,6 +663,16 @@
           "expr": "model_r2",
           "legendFormat": "R² Score",
           "refId": "B"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "db69454e-e558-479e-b4fc-80db52bf91da"
+          },
+          "expr": "avg_prediction",
+          "hide": false,
+          "legendFormat": "Avg Prediction",
+          "refId": "C"
         }
       ],
       "title": "Model Performance Metrics",
@@ -563,7 +684,7 @@
         "h": 1,
         "w": 24,
         "x": 0,
-        "y": 26
+        "y": 34
       },
       "id": 11,
       "title": "System Resources",
@@ -630,7 +751,7 @@
         "h": 8,
         "w": 12,
         "x": 0,
-        "y": 27
+        "y": 35
       },
       "id": 15,
       "options": {
@@ -702,7 +823,8 @@
             "mode": "absolute",
             "steps": [
               {
-                "color": "green"
+                "color": "green",
+                "value": null
               },
               {
                 "color": "red",
@@ -718,7 +840,7 @@
         "h": 8,
         "w": 12,
         "x": 12,
-        "y": 27
+        "y": 35
       },
       "id": 9,
       "options": {
@@ -816,6 +938,6 @@
   },
   "title": "Federated Learning Dashboard",
   "uid": "fcf2a8da-792c-4b9f-a22f-876820b53c2f",
-  "version": 4,
+  "version": 6,
   "weekStart": ""
 }

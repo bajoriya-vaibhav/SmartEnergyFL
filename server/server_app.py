@@ -1,7 +1,6 @@
 """Smart Energy FL server application for load forecasting."""
 
 import os
-import tempfile
 from logging import INFO
 import gc
 from typing import Dict, Optional, Tuple
@@ -26,6 +25,7 @@ model_r2 = Gauge('model_r2', 'R2 score of the global model based on client evalu
 round_time = Gauge('round_time', 'Time taken per round in seconds')
 client_count = Gauge('client_count', 'Number of connected clients')
 round = Gauge('round', 'Current global iteration')
+avg_prediction = Gauge('avg_prediction', 'Average prediction value across clients during evaluation')
 
 metrics_dir = "/app/metrics"
 os.makedirs(metrics_dir, exist_ok=True)
@@ -39,11 +39,13 @@ def save_metrics(round_num: int, metrics: Dict[str, float]):
     """Save metrics to Prometheus for Grafana visualization."""
     rmse = metrics.get("rmse", 0.0)
     r2 = metrics.get("r2", 0.0) 
+    prediction_mean = metrics.get("avg_prediction", 0.0)
     
     # Update Prometheus metrics
     model_rmse.set(rmse)
     model_r2.set(r2) 
     round.set(round_num)
+    avg_prediction.set(prediction_mean)
     
     import time
     timestamp = time.time()
@@ -203,11 +205,13 @@ def evaluate_metrics_aggregation_fn(metrics_list):
     # Calculate weighted average for both RMSE and R2
     rmse_sum = sum(m.get("rmse", 0.0) * num_examples for num_examples, m in metrics_list if "rmse" in m)
     r2_sum = sum(m.get("r2", 0.0) * num_examples for num_examples, m in metrics_list if "r2" in m)
+    prediction_sum = sum(m.get("mean_prediction", 0.0) * num_examples for num_examples, m in metrics_list if "mean_prediction" in m)
     
     # Create aggregated metrics dict
     aggregated_metrics = {
         "rmse": rmse_sum / total_examples if rmse_sum else 0.0,
         "r2": r2_sum / total_examples if r2_sum else 0.0,
+        "avg_prediction": prediction_sum / total_examples if prediction_sum else 0.0,
         "num_clients": len(metrics_list)
     }
     

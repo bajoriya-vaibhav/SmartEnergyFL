@@ -28,26 +28,42 @@ services:
       - ./data:/app/data:ro
     networks:
       - flower-network
+    deploy:
+      resources:
+        limits:
+          cpus: '2.0'
+          memory: 2G
+        reservations:
+          cpus: '1.0'
+          memory: 1G
 
-#   client-2:
-#     build:
-#       context: .
-#       dockerfile: Dockerfile
-#     container_name: client-2
-#     environment:
-#       - CLIENT_ID=2
-#       - BUILDING_ID=123
-#       - SERVER_ADDRESS=server:8080
-#     command:
-#       - --server_address=server:8080
-#       - --client_id=2
-#       - --building_id=123
-#       - --data_path=/app/data/train_processed.feather
-#       - --num_local_round=2
-#     volumes:
-#       - ./data:/app/data:ro
-#     networks:
-#       - flower-network
+  client-2:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: client-2
+    environment:
+      - CLIENT_ID=2
+      - BUILDING_ID=200
+      - SERVER_ADDRESS=server:8080
+    command:
+      - --server_address=server:8080
+      - --client_id=2
+      - --building_id=200
+      - --data_path=/app/data/train_processed_200.feather
+      - --num_local_round=5
+    volumes:
+      - ./data:/app/data:ro
+    networks:
+      - flower-network
+    deploy:
+      resources:
+        limits:
+          cpus: '2.0'
+          memory: 2G
+        reservations:
+          cpus: '1.0'
+          memory: 1G
 networks:
   flower-network:
     external: true
