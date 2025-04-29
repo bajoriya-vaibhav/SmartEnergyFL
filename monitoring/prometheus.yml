@@ -1,6 +1,6 @@
 global:
-  scrape_interval: 15s
-  evaluation_interval: 15s
+  scrape_interval: 5s
+  evaluation_interval: 5s
 
 scrape_configs:
   - job_name: 'prometheus'
@@ -11,7 +11,6 @@ scrape_configs:
     static_configs:
       - targets: ['cadvisor:8080']
 
-  # Make sure this entry exists and is correct
   - job_name: 'server-metrics'
     scrape_interval: 2s 
     scrape_timeout: 1s

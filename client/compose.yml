@@ -23,31 +23,31 @@ services:
       - --client_id=1
       - --building_id=123
       - --data_path=/app/data/train_processed.feather
-      - --num_local_round=2
+      - --num_local_round=5
     volumes:
       - ./data:/app/data:ro
     networks:
       - flower-network
 
-  client-2:
-    build:
-      context: .
-      dockerfile: Dockerfile
-    container_name: client-2
-    environment:
-      - CLIENT_ID=2
-      - BUILDING_ID=123
-      - SERVER_ADDRESS=server:8080
-    command:
-      - --server_address=server:8080
-      - --client_id=2
-      - --building_id=123
-      - --data_path=/app/data/train_processed.feather
-      - --num_local_round=2
-    volumes:
-      - ./data:/app/data:ro
-    networks:
-      - flower-network
+#   client-2:
+#     build:
+#       context: .
+#       dockerfile: Dockerfile
+#     container_name: client-2
+#     environment:
+#       - CLIENT_ID=2
+#       - BUILDING_ID=123
+#       - SERVER_ADDRESS=server:8080
+#     command:
+#       - --server_address=server:8080
+#       - --client_id=2
+#       - --building_id=123
+#       - --data_path=/app/data/train_processed.feather
+#       - --num_local_round=2
+#     volumes:
+#       - ./data:/app/data:ro
+#     networks:
+#       - flower-network
 networks:
   flower-network:
     external: true

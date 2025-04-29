@@ -168,7 +168,7 @@ class EnergyForecastClient(Client):
         self.num_local_rounds = num_local_rounds
         self.lgbm_params = lgbm_params
         self.expected_features = None
-        self.max_days = 5
+        self.max_days = 500
         self._initialize_data_check()
 
         # Add safety parameters for feature alignment

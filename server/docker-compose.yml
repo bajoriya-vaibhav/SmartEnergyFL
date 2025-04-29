@@ -63,10 +63,9 @@ services:
       dockerfile: server/Dockerfile
     container_name: server
     command:
-      - --number_of_rounds=50
+      - --number_of_rounds=100
       - --train_method=bagging
       - --data_path=/app/data/train_processed.feather
-      # TLS removed for testing
     ports:
       - 8080:8080 
       - 8000:8000 
