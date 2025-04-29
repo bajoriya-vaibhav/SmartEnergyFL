@@ -63,7 +63,7 @@ services:
       dockerfile: server/Dockerfile
     container_name: server
     command:
-      - --number_of_rounds=5
+      - --number_of_rounds=50
       - --train_method=bagging
       - --data_path=/app/data/train_processed.feather
       # TLS removed for testing

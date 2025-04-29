@@ -33,19 +33,24 @@ metrics_file = os.path.join(metrics_dir, "metrics.csv")
 
 if not os.path.exists(metrics_file):
     with open(metrics_file, "w") as f:
-        f.write("timestamp,round,rmse\n")
+        f.write("timestamp,round,rmse,r2\n")
 
 def save_metrics(round_num: int, metrics: Dict[str, float]):
     """Save metrics to Prometheus for Grafana visualization."""
     rmse = metrics.get("rmse", 0.0)
-    r2 = metrics.get("r2", 0.0)  # Get R2 from metrics
+    r2 = metrics.get("r2", 0.0) 
     
-    # Update Prometheus gauges
+    # Update Prometheus metrics
     model_rmse.set(rmse)
-    model_r2.set(r2)  # Set R2 gauge
+    model_r2.set(r2) 
     round.set(round_num)
     
-    log(INFO, f"[METRICS] Round {round_num}: RMSE={rmse:.4f}, R2={r2:.4f}")  # Log both metrics
+    import time
+    timestamp = time.time()
+    with open(metrics_file, "a") as f:
+        f.write(f"{timestamp},{round_num},{rmse},{r2}\n")
+    
+    log(INFO, f"[METRICS] Round {round_num}: RMSE={rmse:.4f}, R2={r2:.4f}")
 
 def reduce_mem_usage(df, use_float16=False):
     """Reduce memory usage by converting columns to optimal dtypes."""
@@ -77,29 +82,23 @@ def train_global_model(data_path: str) -> lgb.Booster:
     log(INFO, f"[GLOBAL MODEL] Training global model on {data_path}")
     
     try:
-        # Load data
         train = pd.read_feather(data_path)
         log(INFO, f"[GLOBAL MODEL] Loaded data with shape: {train.shape}")
         
-        # Encode categorical variables
         for col in train.select_dtypes(include=['object']).columns:
             le = LabelEncoder()
             train[col] = le.fit_transform(train[col].astype(str))
         
-        # Optimize memory
         train = reduce_mem_usage(train, use_float16=True)
         
-        # Train-test split
         train_data, test_data = train_test_split(train, test_size=0.2, random_state=42)
         
-        # Prepare datasets
-        X_train_full = train_data.drop(columns=['meter_reading','building_id'])
+        X_train_full = train_data.drop(columns=['meter_reading','building_id','timestamp'])
         y_train_full = np.log1p(train_data["meter_reading"])
         
-        X_test = test_data.drop(columns=['meter_reading','building_id'])
+        X_test = test_data.drop(columns=['meter_reading','building_id','timestamp'])
         y_test = np.log1p(test_data["meter_reading"])
         
-        # Define LightGBM parameters
         params = {
             "objective": "regression",
             "boosting": "gbdt",
@@ -110,7 +109,6 @@ def train_global_model(data_path: str) -> lgb.Booster:
             "metric": "rmse",
         }
         
-        # Define K-Fold Cross-Validation
         kf = KFold(n_splits=3, shuffle=True, random_state=42)
         
         best_rmse = float("inf")
@@ -121,7 +119,6 @@ def train_global_model(data_path: str) -> lgb.Booster:
         
         log(INFO, "[GLOBAL MODEL] Starting K-Fold training")
         
-        # Train models with K-Fold
         for fold, (train_idx, val_idx) in enumerate(kf.split(X_train_full)):
             log(INFO, f"[GLOBAL MODEL] Training Fold {fold + 1}...")
             
@@ -172,11 +169,11 @@ def train_global_model(data_path: str) -> lgb.Booster:
         # Final evaluation on test set
         y_test_pred = best_model.predict(X_test)
         test_rmse = np.sqrt(mean_squared_error(y_test, y_test_pred))
-        test_r2 = r2_score(y_test, y_test_pred)  # Calculate R2 for initial model
+        test_r2 = r2_score(y_test, y_test_pred)
         log(INFO, f"[GLOBAL MODEL] Final evaluation on test set: RMSE = {test_rmse:.4f}, R2 = {test_r2:.4f}")
         
-        # # Save initial metrics
-        # save_metrics(0, {"rmse": float(test_rmse), "avg_fold_rmse": float(avg_rmse)})
+        # Save initial metrics
+        save_metrics(0, {"rmse": float(test_rmse), "r2": float(test_r2)})
         
         return best_model
     

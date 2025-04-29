@@ -1,6 +1,6 @@
 """Federated LightGBM strategies for Flower."""
 from logging import INFO
-from typing import Dict, List, Optional, Tuple, Union, cast
+from typing import Dict, List, Optional, Tuple, Union
 import tempfile
 import os
 import time
@@ -184,7 +184,6 @@ class FedLightGBMBagging(FedAvg):
                 loss_aggregated = sum(res.loss * res.num_examples for _, res in results) / total_examples
         
         return loss_aggregated, aggregated_metrics
-
 
 class FedLightGBMCyclic(FedAvg):
     """Federated Learning strategy for cyclic LightGBM training."""

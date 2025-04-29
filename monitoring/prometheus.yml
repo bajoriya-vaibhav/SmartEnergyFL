@@ -13,8 +13,11 @@ scrape_configs:
 
   # Make sure this entry exists and is correct
   - job_name: 'server-metrics'
+    scrape_interval: 2s 
+    scrape_timeout: 1s
     static_configs:
       - targets: ['server:8000']
+    metrics_path: /metrics
 
   - job_name: 'node-cadvisor'
     static_configs:
