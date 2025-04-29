@@ -1,0 +1,12 @@
+apiVersion: 1
+
+providers:
+  - name: Default
+    folder: FL Monitoring
+    type: file
+    disableDeletion: false
+    updateIntervalSeconds: 30
+    allowUIDOverwrite: true
+    options:
+      path: /etc/grafana/provisioning/dashboards
+      foldersFromFilesStructure: true

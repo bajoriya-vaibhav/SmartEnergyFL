@@ -1,0 +1,85 @@
+version: "3.8"
+
+services:
+  prometheus:
+    image: prom/prometheus:latest
+    container_name: prometheus
+    ports:
+      - 9090:9090
+    deploy:
+      restart_policy:
+        condition: on-failure
+    command:
+      - --config.file=/etc/prometheus/prometheus.yml
+    volumes:
+      - ../monitoring/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+    depends_on:
+      - cadvisor
+    networks:
+      - flower-network
+
+  cadvisor:
+    image: gcr.io/cadvisor/cadvisor:v0.47.0
+    container_name: cadvisor
+    privileged: true
+    deploy:
+      restart_policy:
+        condition: on-failure
+    ports:
+      - "8081:8080"
+    volumes:
+      - /:/rootfs:ro
+      - /var/run:/var/run:ro
+      - /sys:/sys:ro
+      - /var/lib/docker/:/var/lib/docker:ro
+      - /dev/disk/:/dev/disk:ro
+      - /var/run/docker.sock:/var/run/docker.sock
+    networks:
+      - flower-network
+
+  grafana:
+    image: grafana/grafana:latest
+    container_name: grafana
+    ports:
+      - 3000:3000
+    deploy:
+      restart_policy:
+        condition: on-failure
+    volumes:
+      - ../monitoring/grafana.ini:/etc/grafana/grafana.ini
+      - ../monitoring/provisioning/datasources:/etc/grafana/provisioning/datasources
+      - ../monitoring/provisioning/dashboards:/etc/grafana/provisioning/dashboards
+    depends_on:
+      - prometheus
+      - cadvisor
+    command:
+      - --config=/etc/grafana/grafana.ini
+    networks:
+      - flower-network
+
+  server:
+    build:
+      context: ..
+      dockerfile: server/Dockerfile
+    container_name: server
+    command:
+      - --number_of_rounds=5
+      - --train_method=bagging
+      - --data_path=/app/data/train_processed.feather
+      # TLS removed for testing
+    ports:
+      - 8080:8080 
+      - 8000:8000 
+    volumes:
+      - ./data:/app/data
+    depends_on:
+      - prometheus
+    networks:
+      - flower-network
+    environment:
+      - PYTHONUNBUFFERED=1  
+
+networks:
+  flower-network:
+    name: flower-network
+    external: true

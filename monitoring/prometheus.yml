@@ -1,0 +1,21 @@
+global:
+  scrape_interval: 15s
+  evaluation_interval: 15s
+
+scrape_configs:
+  - job_name: 'prometheus'
+    static_configs:
+      - targets: ['localhost:9090']
+
+  - job_name: 'cadvisor'
+    static_configs:
+      - targets: ['cadvisor:8080']
+
+  # Make sure this entry exists and is correct
+  - job_name: 'server-metrics'
+    static_configs:
+      - targets: ['server:8000']
+
+  - job_name: 'node-cadvisor'
+    static_configs:
+      - targets: ['node-cadvisor:8080']
