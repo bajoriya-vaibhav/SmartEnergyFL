@@ -19,9 +19,8 @@ from flwr.common.logger import log
 
 from strategy.fed_lightgbm import FedLightGBMBagging, FedLightGBMCyclic
 
-# Prometheus metrics for monitoring
 model_rmse = Gauge('model_rmse', 'RMSE of the global model based on client evaluations')
-model_r2 = Gauge('model_r2', 'R2 score of the global model based on client evaluations')  # Added R2 gauge
+model_r2 = Gauge('model_r2', 'R2 score of the global model based on client evaluations') 
 round_time = Gauge('round_time', 'Time taken per round in seconds')
 client_count = Gauge('client_count', 'Number of connected clients')
 round = Gauge('round', 'Current global iteration')

@@ -1,5 +1,6 @@
 version: "3.8"
 services:
+# we are using cAdvisor for understanding of the resource usage and performance characteristics of their running containers.
   node-cadvisor:
     image: gcr.io/cadvisor/cadvisor:v0.47.0
     container_name: node-cadvisor
@@ -28,6 +29,7 @@ services:
       - ./data:/app/data:ro
     networks:
       - flower-network
+    # for the deployment perspective, we are using the resource limits and reservations to ensure that the container has enough resources to run efficiently.
     deploy:
       resources:
         limits:

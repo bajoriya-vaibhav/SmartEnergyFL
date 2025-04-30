@@ -9,6 +9,7 @@ from logging import INFO
 from typing import Dict, Tuple, Optional, List
 from datetime import datetime, timedelta
 import time
+import pickle
 
 import pandas as pd
 import numpy as np
@@ -36,7 +37,7 @@ from flwr.common.logger import log
 warnings.filterwarnings("ignore", category=UserWarning)
 
 def reduce_mem_usage(df: pd.DataFrame, use_float16: bool = False) -> pd.DataFrame:
-    """Optimize DataFrame memory usage by adjusting data types."""
+    """in this function we are trying to optimize dataFrame memory usage by adjusting data types to one which will take the least memory while computation. Lowest memory dtype is preferred"""
     for col in df.columns:
         col_type = df[col].dtype
 
@@ -57,7 +58,7 @@ def reduce_mem_usage(df: pd.DataFrame, use_float16: bool = False) -> pd.DataFram
     return df
 
 def align_features(df: pd.DataFrame, expected_features: List[str]) -> pd.DataFrame:
-    """Ensure DataFrame matches expected feature set."""
+    """in this function we are trying to any unexpected or insert the expected fields into the dataFrame to matche the expected feature set."""
     for feature in expected_features:
         if feature not in df.columns:
             df[feature] = 0
@@ -67,7 +68,6 @@ def align_features(df: pd.DataFrame, expected_features: List[str]) -> pd.DataFra
     if extra_features:
         log(INFO, f"Removing extra features: {extra_features}")
     
-    # Reorder columns to match expected order
     aligned_df = df.reindex(columns=expected_features, fill_value=0)
     return aligned_df
 
@@ -78,12 +78,12 @@ def load_day_data(
     auto_select: bool = True,
     expected_features: Optional[List[str]] = None
 ) -> Tuple[pd.DataFrame, pd.DataFrame, pd.Series, pd.Series]:
-    """Load and align data for a specific day with feature matching."""
+    """this function will load and align data for a specific day which we will be basically using for our local model training purpose."""
     try:
         data = pd.read_feather(data_path)
         building_data = data[data['building_id'] == building_id].copy()
 
-        # Auto-select building if needed
+        # if the building id provided while is not present or mismatch with data then it will automatically detect the buiding id and set the new id
         if len(building_data) == 0 and auto_select:
             available_buildings = data['building_id'].unique().tolist()
             selected_building = available_buildings[0]
@@ -94,53 +94,47 @@ def load_day_data(
         building_data['date'] = pd.to_datetime(building_data['timestamp']).astype('int64') % 1_000_000_000//24
         dates = sorted(building_data['date'].unique())
 
-        # Handle day boundaries
         if len(dates) < day:
             day = len(dates)
             log(INFO, f"Adjusted to last available day: {day}")
 
-        # Split data
+        # splitting the data into train and test set where training we are doing on current day and making the prediction for the next day
         train_date = dates[day]
         test_date = dates[day+1]
         train_data = building_data[building_data['date'] == train_date]
         test_data = building_data[building_data['date'] == test_date]
 
-        # Fallback split if no data
+        # if no more data then we will split the data into train and test set where 80% will be used for training and 20% for testing(so basically then it will train as epochs but on local data )
         if len(train_data) == 0 or len(test_data) == 0:
             split_idx = int(len(building_data) * 0.8)
             train_data = building_data.iloc[:split_idx]
             test_data = building_data.iloc[split_idx:]
 
-        # Prepare features and target
         target_col = 'meter_reading' if 'meter_reading' in train_data.columns else 'target'
-        drop_cols = [target_col, 'building_id', 'date', 'timestamp'] # Added timestamp to drop_cols
+        drop_cols = [target_col, 'building_id', 'date', 'timestamp'] 
 
         X_train = train_data.drop(drop_cols, axis=1, errors='ignore')
         y_train = np.log1p(train_data[target_col])
         X_test = test_data.drop(drop_cols, axis=1, errors='ignore')
         y_test = np.log1p(test_data[target_col])
 
-        # Encode categorical features
+        # we encoded the categorical features using the label encoder 
         object_cols = X_train.select_dtypes(include=['object']).columns.tolist()
         for col in object_cols:
             le = LabelEncoder()
-            # Combine unique values from both train and test for fitting
             combined_values = pd.concat([
                 X_train[col].fillna('unknown').astype(str),
                 X_test[col].fillna('unknown').astype(str)
             ]).unique()
             le.fit(combined_values)
-            # Transform both train and test
+
             X_train[col] = le.transform(X_train[col].fillna('unknown').astype(str))
             X_test[col] = le.transform(X_test[col].fillna('unknown').astype(str))
 
-
-        # Align features if expected set provided
         if expected_features:
             X_train = align_features(X_train, expected_features)
             X_test = align_features(X_test, expected_features)
 
-        # Optimize memory
         X_train = reduce_mem_usage(X_train, use_float16=True)
         X_test = reduce_mem_usage(X_test, use_float16=True)
         gc.collect()
@@ -151,8 +145,46 @@ def load_day_data(
         log(INFO, f"Data loading error: {str(e)}")
         raise
 
+class EnsembleModel:
+    """Custom wrapper for ensemble of LightGBM models."""
+    
+    def __init__(self, models_bytes, weights):
+        self.models = []
+        self.weights = weights
+        
+        for model_bytes in models_bytes:
+            with tempfile.NamedTemporaryFile(delete=False) as tmp:
+                tmp.write(model_bytes)
+                tmp_path = tmp.name
+            
+            model = lgb.Booster(model_file=tmp_path)
+            os.unlink(tmp_path)
+            self.models.append(model)
+            
+        self._base_model = self.models[0] if self.models else None
+        
+    def predict(self, data):
+        """Make predictions by averaging across all models."""
+        if not self.models:
+            return np.zeros(len(data))
+            
+        preds = np.zeros(len(data))
+        for model, weight in zip(self.models, self.weights):
+            preds += weight * model.predict(data)
+        return preds
+        
+    def feature_name(self):
+        """Return feature names from base model."""
+        return self._base_model.feature_name() if self._base_model else []
+        
+    def __getattr__(self, name):
+        """Delegate any other methods to the base model."""
+        if hasattr(self._base_model, name):
+            return getattr(self._base_model, name)
+        raise AttributeError(f"{type(self).__name__} has no attribute {name}")
+
 class EnergyForecastClient(Client):
-    """Federated Learning client with feature alignment capabilities."""
+    """we made a custom client wchich will handle all the federated learning task."""
 
     def __init__(
         self,
@@ -168,10 +200,9 @@ class EnergyForecastClient(Client):
         self.num_local_rounds = num_local_rounds
         self.lgbm_params = lgbm_params
         self.expected_features = None
-        self.max_days = 500
+        self.max_days = 50000
         self._initialize_data_check()
 
-        # Add safety parameters for feature alignment
         self.lgbm_params.update({
             "predict_disable_shape_check": True,
             "force_col_wise": True,
@@ -179,7 +210,7 @@ class EnergyForecastClient(Client):
         })
 
     def _initialize_data_check(self):
-        """Initialize feature expectations from local data."""
+        """here we added the expected feature we need for local training of the model."""
         try:
             sample_data = pd.read_feather(self.data_path).iloc[:10]
             self.expected_features = sample_data.drop(
@@ -191,14 +222,14 @@ class EnergyForecastClient(Client):
             log(INFO, f"Initial feature check warning: {str(e)}")
 
     def get_parameters(self, ins: GetParametersIns) -> GetParametersRes:
-        """Implement required get_parameters method."""
+        """get_parameters method."""
         return GetParametersRes(
             status=Status(Code.OK, "OK"),
             parameters=Parameters(tensors=[], tensor_type=""),
         )
     
     def fit(self, ins: FitIns) -> FitRes:
-        """Training round with feature alignment and K-fold cross-validation."""
+        """this function will receive the global model weights and then start training that model on local data and then back the updated weights to the server, also we did K-fold cross-validation to improve the score ."""
         start_time = time.time()
         try:
             config = ins.config
@@ -206,12 +237,10 @@ class EnergyForecastClient(Client):
             current_day = int(config.get("current_day", current_round))
             log(INFO, f"[CLIENT {self.client_id}] Starting training round {current_round}")
 
-            # Get feature expectations from global model
             global_model = self._load_model(ins.parameters.tensors[0]) if ins.parameters.tensors else None
             if global_model:
                 self.expected_features = global_model.feature_name()
 
-            # Load data with feature alignment
             X_train, X_test, y_train, y_test = load_day_data(
                 self.building_id,
                 self.data_path,
@@ -219,11 +248,9 @@ class EnergyForecastClient(Client):
                 expected_features=self.expected_features
             )
 
-            # Store final feature set
             self.expected_features = X_train.columns.tolist()
             
-            # Implement K-fold cross-validation for client training
-            kf = KFold(n_splits=3, shuffle=True, random_state=42)  # Using 3 folds to reduce computational load
+            kf = KFold(n_splits=3, shuffle=True, random_state=42)  # we are using 3 folds to reduce computational load also too less data to train
             fold_models = []
             fold_rmse_scores = []
             
@@ -232,17 +259,16 @@ class EnergyForecastClient(Client):
             for fold, (train_idx, val_idx) in enumerate(kf.split(X_train)):
                 log(INFO, f"[CLIENT {self.client_id}] Training fold {fold+1}/3")
                 
-                # Split data for this fold
+                # data loading step
                 X_fold_train = X_train.iloc[train_idx]
                 y_fold_train = y_train.iloc[train_idx]
                 X_fold_val = X_train.iloc[val_idx]
                 y_fold_val = y_train.iloc[val_idx]
-                
-                # Create datasets for this fold
+
                 train_dataset = lgb.Dataset(X_fold_train, y_fold_train)
                 valid_dataset = lgb.Dataset(X_fold_val, y_fold_val, reference=train_dataset)
                 
-                # Train model for this fold
+                # training step
                 fold_booster = lgb.train(
                     self.lgbm_params,
                     train_dataset,
@@ -253,7 +279,7 @@ class EnergyForecastClient(Client):
                     callbacks=[lgb.early_stopping(stopping_rounds=10)]
                 )
                 
-                # Evaluate fold model
+                # Evaluation step
                 fold_preds = fold_booster.predict(X_fold_val)
                 fold_rmse = np.sqrt(mean_squared_error(y_fold_val, fold_preds))
                 fold_rmse_scores.append(fold_rmse)
@@ -266,7 +292,7 @@ class EnergyForecastClient(Client):
                 del train_dataset, valid_dataset
                 gc.collect()
             
-            # Select best model from folds
+            # selecting best model from folds
             best_fold_idx = np.argmin(fold_rmse_scores)
             booster = fold_models[best_fold_idx]
             best_fold_rmse = fold_rmse_scores[best_fold_idx]
@@ -275,10 +301,9 @@ class EnergyForecastClient(Client):
             log(INFO, f"[CLIENT {self.client_id}] Average fold RMSE: {avg_fold_rmse:.4f}")
             log(INFO, f"[CLIENT {self.client_id}] Selected model from fold {best_fold_idx+1} with RMSE: {best_fold_rmse:.4f}")
 
-            # Update expected features from trained model
             self.expected_features = booster.feature_name()
 
-            # Serialize model
+            # then we seralised the model to send back to the server
             model_bytes = booster.model_to_string().encode()
             
             y_pred = booster.predict(X_test)
@@ -295,7 +320,7 @@ class EnergyForecastClient(Client):
                 num_examples=len(X_train),
                 metrics={
                     "rmse": float(test_rmse),
-                    "r2": float(test_r2),  # Include R2 in metrics
+                    "r2": float(test_r2),
                     "day": current_day,
                     "avg_fold_rmse": float(avg_fold_rmse),
                     "best_fold_rmse": float(best_fold_rmse),
@@ -318,41 +343,32 @@ class EnergyForecastClient(Client):
             log(INFO, f"[CLIENT {self.client_id}] Training completed in {training_time:.1f} seconds")
     
     def evaluate(self, ins: EvaluateIns) -> EvaluateRes:
-        """Evaluation with strict feature alignment."""
+        """this function will evaluate the trained model how it is performing on predicting the next day data."""
         try:
             config = ins.config
-            # Use the round number to determine the *next* day for evaluation
             current_round = int(config.get("round", 1))
-            # Evaluate on the day *after* the training day for that round
-            eval_day = (current_round - 1) % self.max_days + 1 # Day used in training
-            next_eval_day = eval_day + 1 # Typically evaluate on the next day's data
-            # Adjust if next_eval_day goes beyond max_days or available data (logic might need refinement based on data structure)
-            # For simplicity, let's use the 'current_day' from config directly if server sends it for eval
+            eval_day = (current_round - 1) % self.max_days + 1 
+            next_eval_day = eval_day + 1
             eval_day_from_config = int(config.get("current_day", 1))
             log(INFO, f"[CLIENT {self.client_id}] Starting evaluation for round {current_round}, using data for day {eval_day_from_config}")
 
-
-            # Load global model and get expected features
             global_model = self._load_model(ins.parameters.tensors[0])
             if not global_model:
                  raise ValueError("Failed to load global model for evaluation")
             expected_features = global_model.feature_name()
 
-            # Load data with strict feature alignment for the evaluation day
             _, X_test, _, y_test = load_day_data(
                 self.building_id,
                 self.data_path,
-                eval_day_from_config, # Use the day specified in the config
+                eval_day_from_config,
                 expected_features=expected_features
             )
 
-            # Validate feature alignment
             if set(X_test.columns) != set(expected_features):
                 raise ValueError(f"Feature mismatch after alignment: "
                                f"Expected {len(expected_features)} features, "
                                f"Got {len(X_test.columns)}")
 
-            # Make predictions
             y_pred = global_model.predict(X_test)
 
             # y_test = np.expm1(y_test)
@@ -366,7 +382,7 @@ class EnergyForecastClient(Client):
                 status=Status(Code.OK, "Success"),
                 loss=float(rmse),
                 num_examples=len(X_test),
-                metrics={"mean_prediction": mean_prediction, "rmse": float(rmse), "r2": float(r2), "eval_day": eval_day_from_config}, # Log the day used
+                metrics={"mean_prediction": mean_prediction, "rmse": float(rmse), "r2": float(r2), "eval_day": eval_day_from_config},
             )
 
         except Exception as e:
@@ -378,12 +394,26 @@ class EnergyForecastClient(Client):
                 metrics={},
             )
 
-    def _load_model(self, model_bytes: bytes) -> Optional[lgb.Booster]:
-        """Safely load LightGBM model with feature validation."""
+    def _load_model(self, model_bytes: bytes) -> Optional[object]:
+        """Load model from bytes, handling both single models and ensembles."""
         if not model_bytes:
             return None
 
         try:
+            # First try to unpickle as ensemble
+            try:
+                ensemble_data = pickle.loads(model_bytes)
+                if isinstance(ensemble_data, dict) and 'models' in ensemble_data and 'weights' in ensemble_data:
+                    log(INFO, f"Loading ensemble model with {len(ensemble_data['models'])} sub-models")
+                    model = EnsembleModel(ensemble_data['models'], ensemble_data['weights'])
+                    if not self.expected_features:
+                        self.expected_features = model.feature_name()
+                    return model
+            except:
+                # Not a pickle or not an ensemble, try as regular model
+                pass
+                
+            # Try loading as regular LightGBM model
             with tempfile.NamedTemporaryFile(delete=False) as tmp:
                 tmp.write(model_bytes)
                 tmp_path = tmp.name
@@ -398,10 +428,11 @@ class EnergyForecastClient(Client):
 
         except Exception as e:
             log(INFO, f"Model loading error: {str(e)}")
+            traceback.print_exc()
             return None
 
 def run_client() -> None:
-    """Main client execution flow."""
+    """this is the main client execution flow."""
     parser = argparse.ArgumentParser(description="Energy Forecasting Client")
     parser.add_argument("--server_address", type=str, default="127.0.0.1:8080")
     parser.add_argument("--client_id", type=str, required=True)
@@ -420,7 +451,7 @@ def run_client() -> None:
             "objective": "regression",
             "metric": "rmse",
             "boosting_type": "gbdt",
-            "learning_rate": 0.1,        # Increased from 0.05
+            "learning_rate": 0.1,        # Increased from 0.05 as compared to what we done in centralised model
             "num_leaves": 128,            # Reduced from 1280
             "min_data_in_leaf": 20,      # Reduced from 50
             "feature_fraction": 0.8,
