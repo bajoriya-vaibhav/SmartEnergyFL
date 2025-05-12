@@ -307,8 +307,8 @@ class EnergyForecastClient(Client):
             model_bytes = booster.model_to_string().encode()
             
             y_pred = booster.predict(X_test)
-            # y_test = np.expm1(y_test)
-            # y_pred = np.expm1(y_pred)
+            y_test = np.expm1(y_test)
+            y_pred = np.expm1(y_pred)
             test_rmse = np.sqrt(mean_squared_error(y_test, y_pred))
             test_r2 = r2_score(y_test, y_pred) 
             
@@ -371,12 +371,12 @@ class EnergyForecastClient(Client):
 
             y_pred = global_model.predict(X_test)
 
-            # y_test = np.expm1(y_test)
-            # y_pred = np.expm1(y_pred)
+            y_test = np.expm1(y_test)
+            y_pred = np.expm1(y_pred)
 
             rmse = np.sqrt(mean_squared_error(y_test, y_pred))
             r2 = r2_score(y_test, y_pred)
-            mean_prediction = float(np.mean(np.expm1(y_pred)))
+            mean_prediction = float(np.mean(y_pred))
 
             return EvaluateRes(
                 status=Status(Code.OK, "Success"),
