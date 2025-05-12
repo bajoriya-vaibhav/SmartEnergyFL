@@ -1,0 +1,22 @@
+[build-system]
+requires = ["setuptools>=42", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "client"
+version = "0.1.0"
+description = "Federated Learning client for flower"
+dependencies = [
+    "flwr>=1.17.0",
+    "lightgbm>=3.3.5",
+    "numpy>=1.24.0",
+    "pandas>=2.0.0",
+    "scikit-learn>=1.2.0",
+]
+
+[tool.flwr.app.components]
+clientapp = "client_app:app"
+
+[tool.flwr.app.config]
+local-epochs = 1
+batch-size = 32

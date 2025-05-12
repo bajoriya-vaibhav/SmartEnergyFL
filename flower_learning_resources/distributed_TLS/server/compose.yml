@@ -1,0 +1,57 @@
+services:
+  superlink:
+    image: flwr/superlink:${FLWR_VERSION:-1.17.0}
+    command:
+      - --isolation
+      - process
+      - --ssl-ca-certfile=/app/certificates/ca.crt  # Absolute path
+      - --ssl-certfile=/app/certificates/server.pem
+      - --ssl-keyfile=/app/certificates/server.key
+      - --database=state/state.db
+    volumes:
+      - ./state/:/app/state:rw
+      - ./certificates/:/app/certificates:ro  
+    secrets:
+      - source: superlink-ca-certfile
+        target: /app/certificates/ca.crt
+      - source: superlink-certfile
+        target: /app/certificates/server.pem
+      - source: superlink-keyfile
+        target: /app/certificates/server.key
+    ports:
+      - 9092:9092
+      - 9093:9093
+    networks:
+      - flower-network
+
+  serverapp:
+    build:
+      context: ${PROJECT_DIR:-.}
+      dockerfile_inline: |
+        FROM flwr/serverapp:${FLWR_VERSION:-1.17.0}
+
+        WORKDIR /app
+        COPY --chown=app:app pyproject.toml .
+        RUN sed -i 's/.*flwr\[simulation\].*//' pyproject.toml \
+          && python -m pip install -U --no-cache-dir .
+
+        ENTRYPOINT ["flwr-serverapp"]
+    command:
+      - --insecure
+      - --serverappio-api-address
+      - superlink:9091
+    depends_on:
+      - superlink
+    networks:
+      - flower-network
+secrets:
+  superlink-ca-certfile:
+    file: ./certificates/ca.crt
+  superlink-certfile:
+    file: ./certificates/server.pem
+  superlink-keyfile:
+    file: ./certificates/server.key
+networks:
+  flower-network:
+    external: true
+    name: flower-network

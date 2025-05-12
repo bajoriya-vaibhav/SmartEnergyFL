@@ -283,7 +283,7 @@ def main():
         fit_metrics_aggregation_fn=fit_metrics_aggregation_fn,
         evaluate_metrics_aggregation_fn=evaluate_metrics_aggregation_fn,
         round_time_metric=round_time,
-        save_metrics_fn=save_metrics  # Pass the save_metrics function to the strategy
+        save_metrics_fn=save_metrics 
     )
     
     # Configure server
